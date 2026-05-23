@@ -298,3 +298,5 @@ PGPASSWORD=postgres psql -h localhost -p 5434 -U postgres -d scalinglab -c "SELE
 # Connect through the pooler (port 5433)
 
 PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -d scalinglab
+
+Connection pooling is now verified and working. Next up, you will implement table partitioning to handle large tables that grow over time.
