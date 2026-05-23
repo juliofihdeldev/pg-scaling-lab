@@ -1,3 +1,5 @@
+# Lessons Link - https://learn.nextwork.org/projects/2f1f31d3-2209-4f90-9aa1-c7ae1c2261b1
+
 # PostgreSQL Scaling Lab — Review Guide
 
 Use this document after completing the lessons to reinforce what you learned and as a quick reference when working with scaled Postgres setups.
@@ -301,4 +303,26 @@ PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -d scalinglab
 
 Connection pooling is now verified and working. Next up, you will implement table partitioning to handle large tables that grow over time.
 
-# Lessons Link - https://learn.nextwork.org/projects/2f1f31d3-2209-4f90-9aa1-c7ae1c2261b1
+## SECRET MISSIONS
+
+What if your application could automatically send reads to replicas and writes to the primary, using nothing but different connection strings?
+
+That is exactly how production PostgreSQL deployments handle read/write splitting. One pooler sits in front of the primary for writes. A separate pooler sits in front of the replicas for reads. Your application connects to whichever endpoint matches the operation it needs to perform.
+
+In this secret mission, get ready to:
+
+Create a custom PgBouncer configuration that targets both replicas with round-robin distribution.
+Add a read pooler service to Docker Compose and bring up the updated stack.
+Verify writes through the write pooler and reads through the read pooler work together end-to-end.
+
+You've just built a production-grade PostgreSQL scaling lab from scratch. This is the same architecture pattern used by teams running PostgreSQL for hundreds of millions of users.
+
+You've learned how to:
+
+Set up streaming replication with a primary and 2 read replicas, verifying real-time WAL streaming and monitoring replication lag.
+
+Configure PgBouncer connection pooling in transaction mode and observe how connection multiplexing reduces backend connections under load.
+
+Implement declarative table partitioning with monthly ranges, verify partition pruning with EXPLAIN ANALYZE, and manage partition lifecycle operations.
+
+Secret Mission: Implement read/write splitting with separate PgBouncer instances routing writes to the primary and reads to replicas in round-robin.
