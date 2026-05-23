@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>pg-scaling-lab // console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="crt-overlay"></div>
+  <div class="scanlines"></div>
+
+  <div class="terminal">
+    <header class="term-header">
+      <div class="term-bar">
+        <span class="dot red"></span>
+        <span class="dot yellow"></span>
+        <span class="dot green"></span>
+        <span class="term-title">pg-scaling-lab — scaling console v1.0</span>
+        <span class="term-clock" id="clock">--:--:--</span>
+      </div>
+      <pre class="boot-log" id="boot-log"></pre>
+    </header>
+
+    <nav class="term-nav">
+      <button class="nav-btn active" data-panel="overview">[1] OVERVIEW</button>
+      <button class="nav-btn" data-panel="employees">[2] EMPLOYEES</button>
+      <button class="nav-btn" data-panel="orders">[3] PARTITIONS</button>
+      <button class="nav-btn" data-panel="replication">[4] REPLICATION</button>
+    </nav>
+
+    <main class="term-body">
+      <!-- OVERVIEW -->
+      <section class="panel active" id="panel-overview">
+        <div class="grid-2">
+          <div class="box">
+            <div class="box-title">// WRITE POOL → pgbouncer:5433</div>
+            <pre class="box-content" id="write-status">loading...</pre>
+          </div>
+          <div class="box">
+            <div class="box-title">// READ POOL → pgbouncer-read:5436</div>
+            <pre class="box-content" id="read-status">loading...</pre>
+          </div>
+        </div>
+
+        <div class="box">
+          <div class="box-title">// ARCHITECTURE</div>
+          <pre class="box-content ascii">                    ┌─────────────────┐
+                    │   THIS CONSOLE  │
+                    └────────┬────────┘
+                             │
+           ┌─────────────────┼─────────────────┐
+           │ writes          │ reads           │
+           ▼                 ▼                 │
+    ┌──────────────┐  ┌──────────────┐         │
+    │  pgbouncer   │  │pgbouncer-read│         │
+    │  :5433       │  │  :5436       │         │
+    └──────┬───────┘  └──────┬───────┘         │
+           │                 │ round-robin     │
+           ▼                 ▼                 │
+    ┌──────────────┐  ┌──────────────┐         │
+    │  pg-primary  │──│ pg-replica-1 │◄────────┤ WAL
+    │  :5432       │  │  :5434       │         │
+    └──────────────┘  └──────────────┘         │
+           │          ┌──────────────┐         │
+           └─────────►│ pg-replica-2 │◄────────┘
+                      │  :5435       │
+                      └──────────────┘</pre>
+        </div>
+
+        <div class="box">
+          <div class="box-title">// SYSTEM METRICS</div>
+          <div class="metrics" id="metrics">
+            <div class="metric"><span class="label">API</span><span class="value" id="metric-api">—</span></div>
+            <div class="metric"><span class="label">EMPLOYEES</span><span class="value" id="metric-employees">—</span></div>
+            <div class="metric"><span class="label">PARTITIONS</span><span class="value" id="metric-partitions">—</span></div>
+            <div class="metric"><span class="label">REPLICATION</span><span class="value" id="metric-replication">—</span></div>
+            <div class="metric"><span class="label">LAST SYNC</span><span class="value" id="metric-sync">—</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- EMPLOYEES -->
+      <section class="panel" id="panel-employees">
+        <div class="box">
+          <div class="box-title">// INSERT EMPLOYEE (write pool)</div>
+          <form class="cmd-form" id="employee-form">
+            <div class="cmd-line">
+              <span class="prompt">pg-lab&gt;</span>
+              <span class="cmd">INSERT INTO employees</span>
+            </div>
+            <div class="form-row">
+              <label>name</label>
+              <input type="text" name="name" placeholder="Alice Chen" required />
+            </div>
+            <div class="form-row">
+              <label>department</label>
+              <input type="text" name="department" placeholder="Engineering" />
+            </div>
+            <div class="form-row">
+              <label>salary</label>
+              <input type="number" name="salary" placeholder="95000" step="0.01" />
+            </div>
+            <button type="submit" class="term-btn">EXECUTE WRITE ▶</button>
+          </form>
+        </div>
+
+        <div class="box">
+          <div class="box-title">// BULK GENERATE (write pool — write pressure test)</div>
+          <div class="cmd-form">
+            <div class="cmd-line">
+              <span class="prompt">pg-lab&gt;</span>
+              <span class="cmd">INSERT INTO employees SELECT ... FROM generate_series</span>
+            </div>
+            <p class="hint">Generate synthetic employees to test replication lag and read scaling.</p>
+            <div class="bulk-actions">
+              <button class="term-btn bulk-btn" data-amount="10k">10K ROWS</button>
+              <button class="term-btn bulk-btn" data-amount="100k">100K ROWS</button>
+              <button class="term-btn bulk-btn warn" data-amount="1m">1M ROWS</button>
+            </div>
+            <pre class="box-content output compact" id="bulk-output">select amount above to begin...</pre>
+          </div>
+        </div>
+
+        <div class="box">
+          <div class="box-title">// EMPLOYEES (read pool) — last 50 rows · <span id="employees-total" class="dim">total: —</span></div>
+          <div class="table-wrap">
+            <table class="term-table" id="employees-table">
+              <thead>
+                <tr><th>ID</th><th>NAME</th><th>DEPARTMENT</th><th>SALARY</th></tr>
+              </thead>
+              <tbody id="employees-body">
+                <tr><td colspan="4" class="dim">fetching...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ORDERS / PARTITIONS -->
+      <section class="panel" id="panel-orders">
+        <div class="box">
+          <div class="box-title">// STEP 1 — CREATE PARTITIONS (write pool)</div>
+          <div class="cmd-form">
+            <div class="cmd-line">
+              <span class="prompt">pg-lab&gt;</span>
+              <span class="cmd">CREATE TABLE orders ... PARTITION BY RANGE (order_date)</span>
+            </div>
+            <p class="hint">Creates parent table + 6 monthly partitions (Jan–Jun 2025) + default partition.</p>
+            <button class="term-btn" id="partition-setup-btn">CREATE 6 MONTH PARTITIONS ▶</button>
+            <pre class="box-content output compact" id="partition-setup-output">not initialized</pre>
+          </div>
+        </div>
+
+        <div class="box">
+          <div class="box-title">// STEP 2 — SEED ORDER DATA (write pool)</div>
+          <div class="cmd-form">
+            <div class="cmd-line">
+              <span class="prompt">pg-lab&gt;</span>
+              <span class="cmd">INSERT INTO orders SELECT ... FROM generate_series</span>
+            </div>
+            <p class="hint">Spreads rows across Jan–Jun 2025. Check summary below to see partition routing.</p>
+            <div class="bulk-actions">
+              <button class="term-btn bulk-btn orders-seed-btn" data-amount="10k">SEED 10K</button>
+              <button class="term-btn bulk-btn orders-seed-btn" data-amount="100k">SEED 100K</button>
+            </div>
+            <pre class="box-content output compact" id="partition-seed-output">run setup first, then seed</pre>
+          </div>
+        </div>
+
+        <div class="box">
+          <div class="box-title">// STEP 3 — DETACH PARTITION (write pool)</div>
+          <div class="cmd-form">
+            <div class="cmd-line">
+              <span class="prompt">pg-lab&gt;</span>
+              <span class="cmd">ALTER TABLE orders DETACH PARTITION ...</span>
+            </div>
+            <p class="hint">Detaches a month so it becomes a standalone table — data stays, but parent queries skip it.</p>
+            <div class="form-row">
+              <label>partition</label>
+              <select id="detach-select">
+                <option value="orders_2025_01">orders_2025_01 (Jan)</option>
+                <option value="orders_2025_02">orders_2025_02 (Feb)</option>
+                <option value="orders_2025_03">orders_2025_03 (Mar)</option>
+                <option value="orders_2025_04">orders_2025_04 (Apr)</option>
+                <option value="orders_2025_05">orders_2025_05 (May)</option>
+                <option value="orders_2025_06">orders_2025_06 (Jun)</option>
+              </select>
+            </div>
+            <button class="term-btn warn-btn" id="partition-detach-btn">DETACH PARTITION ▶</button>
+            <pre class="box-content output compact" id="partition-detach-output">select a partition above</pre>
+          </div>
+        </div>
+
+        <div class="box">
+          <div class="box-title">// STEP 4 — QUERY PARTITION (read pool)</div>
+          <div class="cmd-form">
+            <div class="cmd-line">
+              <span class="prompt">pg-lab&gt;</span>
+              <span class="cmd">SELECT ... FROM orders WHERE ... vs SELECT ... FROM orders_2025_01</span>
+            </div>
+            <p class="hint">Compare direct table query vs parent table query. After detach, parent returns 0 for that range but direct still has rows.</p>
+            <div class="form-row">
+              <label>partition</label>
+              <select id="query-select">
+                <option value="orders_2025_01">orders_2025_01 (Jan)</option>
+                <option value="orders_2025_02">orders_2025_02 (Feb)</option>
+                <option value="orders_2025_03">orders_2025_03 (Mar)</option>
+                <option value="orders_2025_04">orders_2025_04 (Apr)</option>
+                <option value="orders_2025_05">orders_2025_05 (May)</option>
+                <option value="orders_2025_06">orders_2025_06 (Jun)</option>
+              </select>
+            </div>
+            <button class="term-btn" id="partition-query-btn">RUN QUERY TEST ▶</button>
+            <pre class="box-content output" id="partition-query-output">awaiting query...</pre>
+          </div>
+        </div>
+
+        <div class="box">
+          <div class="box-title">// PARTITION STATUS (read pool)</div>
+          <div class="table-wrap">
+            <table class="term-table" id="partitions-table">
+              <thead>
+                <tr><th>PARTITION</th><th>STATUS</th><th>ROWS</th><th>BAR</th></tr>
+              </thead>
+              <tbody id="partitions-body">
+                <tr><td colspan="4" class="dim">fetching...</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="hint dim" id="partitions-hint"></p>
+        </div>
+      </section>
+
+      <!-- REPLICATION -->
+      <section class="panel" id="panel-replication">
+        <div class="box">
+          <div class="box-title">// REPLICATION TEST</div>
+          <p class="hint">Writes a marker row via write pool, then reads it back via read pool.</p>
+          <button class="term-btn" id="replication-btn">RUN REPLICATION TEST ▶</button>
+          <pre class="box-content output" id="replication-output">awaiting command...</pre>
+        </div>
+
+        <div class="box">
+          <div class="box-title">// HOW TO READ RESULTS</div>
+          <pre class="box-content dim">replicated: true   → row visible on replica (WAL streaming OK)
+replicated: false  → replica lag — retry in ~1s (normal under load)
+
+writePool.is_replica  → should be false (primary)
+readPool.is_replica   → should be true  (standby)</pre>
+        </div>
+      </section>
+    </main>
+
+    <footer class="term-footer">
+      <div class="footer-left">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="status-text">connecting...</span>
+      </div>
+      <div class="footer-right">
+        <label class="auto-refresh">
+          <input type="checkbox" id="auto-refresh" checked />
+          AUTO-REFRESH 5s
+        </label>
+        <button class="term-btn small" id="refresh-btn">↻ REFRESH</button>
+      </div>
+    </footer>
+
+    <div class="console-log" id="console-log"></div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

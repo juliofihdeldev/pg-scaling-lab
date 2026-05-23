@@ -1,83 +1,129 @@
 services:
-  pg-primary:
-    image: postgres:17
-    container_name: pg-primary
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: scalinglab
-    ports:
-      - "5432:5432"
-    volumes:
-      - pg_primary_data:/var/lib/postgresql/data
-      - ./init-primary.sh:/docker-entrypoint-initdb.d/init-primary.sh
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+    pg-primary:
+        image: postgres:17
+        container_name: pg-primary
+        environment:
+            POSTGRES_USER: postgres
+            POSTGRES_PASSWORD: postgres
+            POSTGRES_DB: scalinglab
+        ports:
+            - "5432:5432"
+        volumes:
+            - pg_primary_data:/var/lib/postgresql/data
+            - ./init-primary.sh:/docker-entrypoint-initdb.d/init-primary.sh
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U postgres"]
+            interval: 5s
+            timeout: 5s
+            retries: 5
 
-  pg-replica-1:
-    image: postgres:17
-    container_name: pg-replica-1
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      PGUSER: postgres
-    ports:
-      - "5434:5432"
-    volumes:
-      - pg_replica1_data:/var/lib/postgresql/data
-      - ./init-replica.sh:/init-replica.sh
-    entrypoint: /bin/bash
-    command: /init-replica.sh
-    depends_on:
-      pg-primary:
-        condition: service_healthy
+    pg-replica-1:
+        image: postgres:17
+        container_name: pg-replica-1
+        environment:
+            POSTGRES_USER: postgres
+            POSTGRES_PASSWORD: postgres
+            PGUSER: postgres
+        ports:
+            - "5434:5432"
+        volumes:
+            - pg_replica1_data:/var/lib/postgresql/data
+            - ./init-replica.sh:/init-replica.sh
+        entrypoint: /bin/bash
+        command: /init-replica.sh
+        depends_on:
+            pg-primary:
+                condition: service_healthy
 
-  pg-replica-2:
-    image: postgres:17
-    container_name: pg-replica-2
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      PGUSER: postgres
-    ports:
-      - "5435:5432"
-    volumes:
-      - pg_replica2_data:/var/lib/postgresql/data
-      - ./init-replica.sh:/init-replica.sh
-    entrypoint: /bin/bash
-    command: /init-replica.sh
-    depends_on:
-      pg-primary:
-        condition: service_healthy
+    pg-replica-2:
+        image: postgres:17
+        container_name: pg-replica-2
+        environment:
+            POSTGRES_USER: postgres
+            POSTGRES_PASSWORD: postgres
+            PGUSER: postgres
+        ports:
+            - "5435:5432"
+        volumes:
+            - pg_replica2_data:/var/lib/postgresql/data
+            - ./init-replica.sh:/init-replica.sh
+        entrypoint: /bin/bash
+        command: /init-replica.sh
+        depends_on:
+            pg-primary:
+                condition: service_healthy
 
-  pgbouncer:
-    image: edoburu/pgbouncer
-    container_name: pgbouncer
-    environment:
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_HOST: pg-primary
-      DB_NAME: scalinglab
-      POOL_MODE: transaction
-      MAX_CLIENT_CONN: 200
-      DEFAULT_POOL_SIZE: 20
-      AUTH_TYPE: scram-sha-256
-      ADMIN_USERS: postgres
-    ports:
-      - "5433:5432"
-    depends_on:
-      pg-primary:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "pg_isready", "-h", "localhost"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+    pgbouncer:
+        image: edoburu/pgbouncer
+        container_name: pgbouncer
+        environment:
+            DB_USER: postgres
+            DB_PASSWORD: postgres
+            DB_HOST: pg-primary
+            DB_NAME: scalinglab
+            POOL_MODE: transaction
+            MAX_CLIENT_CONN: 200
+            DEFAULT_POOL_SIZE: 20
+            AUTH_TYPE: scram-sha-256
+            ADMIN_USERS: postgres
+        ports:
+            - "5433:5432"
+        depends_on:
+            pg-primary:
+                condition: service_healthy
+        healthcheck:
+            test: ["CMD", "pg_isready", "-h", "localhost"]
+            interval: 5s
+            timeout: 5s
+            retries: 5
 
+    pgbouncer-read:
+        image: edoburu/pgbouncer
+        container_name: pgbouncer-read
+        environment:
+            DB_USER: postgres
+            DB_PASSWORD: postgres
+            DB_HOST: pg-replica-1
+            DB_NAME: scalinglab
+            POOL_MODE: transaction
+            MAX_CLIENT_CONN: 200
+            DEFAULT_POOL_SIZE: 20
+            AUTH_TYPE: scram-sha-256
+            ADMIN_USERS: postgres
+            SERVER_ROUND_ROBIN: 1
+        ports:
+            - "5436:5432"
+        volumes:
+            - ./pgbouncer-read.ini:/etc/pgbouncer/pgbouncer.ini:ro
+        depends_on:
+            pg-primary:
+                condition: service_healthy
+        healthcheck:
+            test: ["CMD", "pg_isready", "-h", "localhost"]
+            interval: 5s
+            timeout: 5s
+            retries: 5
+
+    api:
+        build: .
+        container_name: pg-scaling-api
+        environment:
+            PORT: 3000
+            DB_USER: postgres
+            DB_PASSWORD: postgres
+            DB_NAME: scalinglab
+            WRITE_DB_HOST: pgbouncer
+            WRITE_DB_PORT: 5432
+            READ_DB_HOST: pgbouncer-read
+            READ_DB_PORT: 5432
+        ports:
+            - "3000:3000"
+        depends_on:
+            pgbouncer:
+                condition: service_healthy
+            pgbouncer-read:
+                condition: service_healthy
 volumes:
-  pg_primary_data:
-  pg_replica1_data:
-  pg_replica2_data:
+    pg_primary_data:
+    pg_replica1_data:
+    pg_replica2_data:

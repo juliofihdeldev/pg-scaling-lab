@@ -1,12 +1,17 @@
 {
   "name": "pg-scaling-lab",
   "version": "1.0.0",
-  "description": "",
+  "description": "PostgreSQL scaling lab API",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js",
+    "dev": "node --watch index.js"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "express": "^5.1.0",
+    "pg": "^8.16.0"
+  }
 }
