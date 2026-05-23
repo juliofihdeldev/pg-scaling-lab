@@ -234,6 +234,7 @@ This removes all containers, volumes, and frees ports 5432–5436 and 3000.
 
 - [REVIEW.md](./REVIEW.md) — commands, troubleshooting, self-test quiz
 - [ACCOMPLISHMENTS.md](./ACCOMPLISHMENTS.md) — lesson-by-lesson summary
+- [LEARNING-PATH.md](./LEARNING-PATH.md) — suggested roadmap with checklist
 - [NextWork lesson](https://learn.nextwork.org/projects/2f1f31d3-2209-4f90-9aa1-c7ae1c2261b1)
 
 ---
