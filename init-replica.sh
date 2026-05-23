@@ -1,8 +1,10 @@
 #!/bin/bash
 set -e
 
+export PGPASSWORD=replicator_pass
+
 # Wait for primary to be ready
-until PGPASSWORD=replicator_pass pg_isready -h pg-primary -U replicator -d replication; do
+until pg_isready -h pg-primary -U replicator -d replication; do
   echo "Waiting for primary to be ready..."
   sleep 2
 done
@@ -12,7 +14,7 @@ if [ ! -s "$PGDATA/PG_VERSION" ]; then
   echo "Cloning primary with pg_basebackup..."
   rm -rf "$PGDATA"/*
 
-  PGPASSWORD=replicator_pass pg_basebackup \
+  pg_basebackup \
     -h pg-primary \
     -U replicator \
     -D "$PGDATA" \
@@ -22,8 +24,11 @@ if [ ! -s "$PGDATA/PG_VERSION" ]; then
     -S "replica_slot_$(hostname | tr '-' '_')" \
     -c fast
 
+  chown -R postgres:postgres "$PGDATA"
+  chmod 700 "$PGDATA"
+
   echo "Backup complete. Starting replica..."
 fi
 
-# Start PostgreSQL in the foreground
-exec postgres
+# Start PostgreSQL in the foreground as the postgres user
+exec gosu postgres postgres
