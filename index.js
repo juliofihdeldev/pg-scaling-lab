@@ -1,5 +1,6 @@
 const express = require("express");
 const { writePool, readPool, ensureSchema, dbStatus } = require("./db");
+const cache = require("./cache");
 const partitions = require("./partitions");
 
 const path = require("path");
@@ -11,7 +12,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/health", (_req, res) => {
-  res.json({ status: "ok" });
+  res.json({ status: "ok", cache: cache.isEnabled() });
 });
 
 app.get("/db/status", async (_req, res, next) => {
@@ -26,20 +27,53 @@ app.get("/db/status", async (_req, res, next) => {
   }
 });
 
-app.get("/employees", async (_req, res, next) => {
+app.get("/cache/stats", async (_req, res, next) => {
   try {
-    const [result, totalResult] = await Promise.all([
-      readPool.query(
-        "SELECT id, name, department, salary FROM employees ORDER BY id DESC LIMIT 50"
-      ),
-      readPool.query("SELECT COUNT(*)::int AS total FROM employees"),
-    ]);
-    res.json({
-      source: "read-pool",
-      count: result.rowCount,
-      total: totalResult.rows[0].total,
-      rows: result.rows,
-    });
+    res.json(await cache.getStats());
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post("/cache/flush", async (_req, res, next) => {
+  try {
+    await cache.flushAll();
+    res.json({ flushed: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+async function fetchEmployeesFromDb() {
+  const [result, totalResult] = await Promise.all([
+    readPool.query(
+      "SELECT id, name, department, salary FROM employees ORDER BY id DESC LIMIT 50"
+    ),
+    readPool.query("SELECT COUNT(*)::int AS total FROM employees"),
+  ]);
+  return {
+    source: "read-pool",
+    count: result.rowCount,
+    total: totalResult.rows[0].total,
+    rows: result.rows,
+  };
+}
+
+app.get("/employees", async (req, res, next) => {
+  const bypass = req.query.bypass === "1" || req.query.bypass === "true";
+
+  try {
+    if (bypass || !cache.isEnabled()) {
+      const data = await fetchEmployeesFromDb();
+      return res.json({ ...data, cache: "bypass" });
+    }
+
+    const { data, cache: cacheResult } = await cache.getOrFetch(
+      cache.KEYS.employeesList,
+      fetchEmployeesFromDb
+    );
+    res.set("X-Cache", cacheResult.toUpperCase());
+    res.json({ ...data, cache: cacheResult });
   } catch (err) {
     next(err);
   }
@@ -77,11 +111,14 @@ app.post("/employees/bulk", async (req, res, next) => {
       [count]
     );
 
+    await cache.invalidateEmployees();
+
     res.status(201).json({
       source: "write-pool",
       amount,
       inserted: result.rowCount,
       durationMs: Date.now() - start,
+      cache_invalidated: true,
     });
   } catch (err) {
     next(err);
@@ -116,7 +153,12 @@ app.post("/employees", async (req, res, next) => {
        RETURNING id, name, department, salary`,
       [name, department || null, salary ?? null]
     );
-    res.status(201).json({ source: "write-pool", row: result.rows[0] });
+    await cache.invalidateEmployees();
+    res.status(201).json({
+      source: "write-pool",
+      row: result.rows[0],
+      cache_invalidated: true,
+    });
   } catch (err) {
     next(err);
   }
@@ -231,6 +273,7 @@ app.get("/test/replication", async (_req, res, next) => {
       "INSERT INTO employees (name, department, salary) VALUES ($1, $2, $3)",
       [marker, "Test", 1]
     );
+    await cache.invalidateEmployees();
 
     const [fromWrite, fromRead] = await Promise.all([
       writePool.query(
@@ -248,9 +291,35 @@ app.get("/test/replication", async (_req, res, next) => {
       writePool: { found: fromWrite.rowCount > 0, row: fromWrite.rows[0] ?? null },
       readPool: { found: fromRead.rowCount > 0, row: fromRead.rows[0] ?? null },
       replicated: fromRead.rowCount > 0,
+      cache_invalidated: true,
       note: fromRead.rowCount === 0
         ? "Row not yet visible on read pool — replica lag is normal; retry in a moment"
         : "Replication is working",
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.get("/test/cache", async (_req, res, next) => {
+  try {
+    await cache.delKeys(cache.KEYS.employeesList);
+
+    const first = cache.isEnabled()
+      ? await cache.getOrFetch(cache.KEYS.employeesList, fetchEmployeesFromDb)
+      : { data: await fetchEmployeesFromDb(), cache: "bypass" };
+
+    const second = cache.isEnabled()
+      ? await cache.getOrFetch(cache.KEYS.employeesList, fetchEmployeesFromDb)
+      : { data: await fetchEmployeesFromDb(), cache: "bypass" };
+
+    const stats = await cache.getStats();
+
+    res.json({
+      first_request: { cache: first.cache, total: first.data.total },
+      second_request: { cache: second.cache, total: second.data.total },
+      expected: "first=miss, second=hit (when Redis enabled and TTL not expired)",
+      stats: stats.app,
     });
   } catch (err) {
     next(err);
@@ -264,10 +333,20 @@ app.use((err, _req, res, _next) => {
 
 async function start() {
   await ensureSchema();
+
+  if (process.env.REDIS_ENABLED !== "false") {
+    try {
+      await cache.connectRedis();
+    } catch (err) {
+      console.warn("Redis unavailable — running without cache:", err.message);
+    }
+  }
+
   app.listen(PORT, () => {
     console.log(`API listening on http://localhost:${PORT}`);
     console.log(`Write pool → ${process.env.WRITE_DB_HOST || "localhost"}:${process.env.WRITE_DB_PORT || 5433}`);
     console.log(`Read pool  → ${process.env.READ_DB_HOST || "localhost"}:${process.env.READ_DB_PORT || 5436}`);
+    console.log(`Cache      → ${cache.isEnabled() ? "Redis ON" : "disabled"}`);
   });
 }
 

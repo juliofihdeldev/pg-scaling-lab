@@ -46,6 +46,7 @@ Based on the [NextWork PostgreSQL Scaling Lab](https://learn.nextwork.org/projec
 | `pg-replica-2`   | 5435 | Read replica                      |
 | `pgbouncer`      | 5433 | Write pooler → primary            |
 | `pgbouncer-read` | 5436 | Read pooler → replicas            |
+| `redis`          | 6379 | Cache layer (cache-aside)         |
 | `api`            | 3000 | Express API + console dashboard   |
 
 **Credentials (lab only):**
@@ -120,9 +121,12 @@ When running outside Docker, the API connects to `localhost:5433` (write) and `l
 | ------ | --------------------------- | ----- | ---------------------------------- |
 | GET    | `/health`                   | —     | Health check                       |
 | GET    | `/db/status`                | both  | Primary vs replica info            |
-| GET    | `/employees`                | read  | List employees (last 50 + total)   |
-| POST   | `/employees`                | write | Insert one employee                |
+| GET    | `/employees`                | read  | List employees (cached, use `?bypass=1` to skip) |
+| POST   | `/employees`                | write | Insert one employee (invalidates cache) |
 | POST   | `/employees/bulk`           | write | Bulk insert `{ "amount": "10k" }`  |
+| GET    | `/cache/stats`              | —     | Hit/miss stats                     |
+| POST   | `/cache/flush`              | —     | Clear Redis                        |
+| GET    | `/test/cache`               | —     | Cache-aside hit/miss demo          |
 | GET    | `/test/replication`         | both  | Replication smoke test             |
 | POST   | `/partitions/setup`         | write | Create 6-month partitioned table   |
 | POST   | `/partitions/seed`          | write | Seed orders `{ "amount": "10k" }`  |
@@ -131,6 +135,28 @@ When running outside Docker, the API connects to `localhost:5433` (write) and `l
 | GET    | `/partitions/query/:name`   | read  | Direct vs parent query comparison  |
 
 Bulk amount values: `10k`, `100k`, `1m` (employees) · `10k`, `100k` (orders).
+
+---
+
+## Redis caching (branch: `caching-with-redis`)
+
+**Cache-aside** on `GET /employees`:
+
+1. Check Redis for `employees:list`
+2. On **miss** → query read pool → store in Redis (TTL 30s)
+3. On **write** → invalidate cache key
+
+Try it in the dashboard **[5] CACHE** panel or:
+
+```bash
+curl http://localhost:3000/test/cache          # miss then hit
+curl http://localhost:3000/employees           # cached read
+curl http://localhost:3000/employees?bypass=1  # skip cache
+curl -X POST http://localhost:3000/employees \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Cache Test","department":"Eng","salary":90000}'
+curl http://localhost:3000/cache/stats
+```
 
 ---
 
@@ -157,6 +183,7 @@ pg-scaling-lab/
 ├── pgbouncer-read.ini    # Read pooler round-robin config
 ├── index.js              # Express API
 ├── db.js                 # Read/write connection pools
+├── cache.js              # Redis cache-aside layer
 ├── partitions.js         # Partition setup, seed, detach, query
 ├── public/               # Console dashboard (HTML/CSS/JS)
 ├── sql.sql               # Manual SQL exercises

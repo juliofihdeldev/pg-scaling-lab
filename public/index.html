@@ -19,7 +19,7 @@
         <span class="dot red"></span>
         <span class="dot yellow"></span>
         <span class="dot green"></span>
-        <span class="term-title">pg-scaling-lab — scaling console v1.0</span>
+        <span class="term-title">pg-scaling-lab — scaling console v1.1 + Redis</span>
         <span class="term-clock" id="clock">--:--:--</span>
       </div>
       <pre class="boot-log" id="boot-log"></pre>
@@ -30,6 +30,7 @@
       <button class="nav-btn" data-panel="employees">[2] EMPLOYEES</button>
       <button class="nav-btn" data-panel="orders">[3] PARTITIONS</button>
       <button class="nav-btn" data-panel="replication">[4] REPLICATION</button>
+      <button class="nav-btn" data-panel="cache">[5] CACHE</button>
     </nav>
 
     <main class="term-body">
@@ -52,23 +53,29 @@
                     │   THIS CONSOLE  │
                     └────────┬────────┘
                              │
-           ┌─────────────────┼─────────────────┐
-           │ writes          │ reads           │
-           ▼                 ▼                 │
-    ┌──────────────┐  ┌──────────────┐         │
-    │  pgbouncer   │  │pgbouncer-read│         │
-    │  :5433       │  │  :5436       │         │
-    └──────┬───────┘  └──────┬───────┘         │
-           │                 │ round-robin     │
-           ▼                 ▼                 │
-    ┌──────────────┐  ┌──────────────┐         │
-    │  pg-primary  │──│ pg-replica-1 │◄────────┤ WAL
-    │  :5432       │  │  :5434       │         │
-    └──────────────┘  └──────────────┘         │
-           │          ┌──────────────┐         │
-           └─────────►│ pg-replica-2 │◄────────┘
-                      │  :5435       │
-                      └──────────────┘</pre>
+                    reads ───┼─── writes
+                             │
+                    ┌────────▼────────┐
+                    │   Express API   │
+                    └───┬────────┬────┘
+            cache hit   │        │  invalidate on write
+                        ▼        ▼
+                 ┌──────────┐  ┌──────────────┐
+                 │  Redis   │  │  pgbouncer   │
+                 │  :6379   │  │  :5433       │
+                 └────┬─────┘  └──────┬───────┘
+                      │ miss          │
+                      ▼               ▼
+               ┌──────────────┐  ┌──────────────┐
+               │pgbouncer-read│  │  pg-primary  │
+               │  :5436       │  │  :5432       │
+               └──────┬───────┘  └──────┬───────┘
+                      │                 │ WAL
+                      ▼                 ▼
+               ┌──────────────┐  ┌──────────────┐
+               │ pg-replicas  │  │ pg-replicas  │
+               │ :5434 :5435   │  │              │
+               └──────────────┘  └──────────────┘</pre>
         </div>
 
         <div class="box">
@@ -78,6 +85,7 @@
             <div class="metric"><span class="label">EMPLOYEES</span><span class="value" id="metric-employees">—</span></div>
             <div class="metric"><span class="label">PARTITIONS</span><span class="value" id="metric-partitions">—</span></div>
             <div class="metric"><span class="label">REPLICATION</span><span class="value" id="metric-replication">—</span></div>
+            <div class="metric"><span class="label">CACHE HIT %</span><span class="value" id="metric-cache">—</span></div>
             <div class="metric"><span class="label">LAST SYNC</span><span class="value" id="metric-sync">—</span></div>
           </div>
         </div>
@@ -126,7 +134,7 @@
         </div>
 
         <div class="box">
-          <div class="box-title">// EMPLOYEES (read pool) — last 50 rows · <span id="employees-total" class="dim">total: —</span></div>
+          <div class="box-title">// EMPLOYEES (read pool + Redis cache) — last 50 · <span id="employees-total" class="dim">total: —</span> · <span id="employees-cache" class="dim">cache: —</span></div>
           <div class="table-wrap">
             <table class="term-table" id="employees-table">
               <thead>
@@ -251,6 +259,37 @@ replicated: false  → replica lag — retry in ~1s (normal under load)
 
 writePool.is_replica  → should be false (primary)
 readPool.is_replica   → should be true  (standby)</pre>
+        </div>
+      </section>
+
+      <!-- CACHE -->
+      <section class="panel" id="panel-cache">
+        <div class="box">
+          <div class="box-title">// CACHE-ASIDE PATTERN (Redis :6379)</div>
+          <pre class="box-content dim">GET  /employees  → check Redis → on miss, query read pool → store in Redis (TTL 30s)
+POST /employees  → write pool → invalidate Redis key
+
+Why? Reads hit memory instead of Postgres. Writes bust the cache so stale data expires.</pre>
+        </div>
+
+        <div class="box">
+          <div class="box-title">// CACHE STATS</div>
+          <pre class="box-content" id="cache-stats-output">loading...</pre>
+          <div class="bulk-actions">
+            <button class="term-btn" id="cache-test-btn">RUN HIT/MISS TEST ▶</button>
+            <button class="term-btn warn-btn" id="cache-flush-btn">FLUSH CACHE ▶</button>
+            <button class="term-btn" id="cache-bypass-btn">FETCH BYPASS DB ▶</button>
+          </div>
+          <pre class="box-content output" id="cache-test-output">run hit/miss test to see cache-aside in action</pre>
+        </div>
+
+        <div class="box">
+          <div class="box-title">// STALE DATA DEMO</div>
+          <p class="hint">Insert via write pool without invalidation path — or wait for TTL expiry. After bulk insert, cache is invalidated automatically.</p>
+          <pre class="box-content dim">1. Run HIT/MISS TEST → first miss, second hit
+2. FLUSH CACHE → resets Redis
+3. Insert employee → cache invalidated (next read = miss)
+4. Use BYPASS to force read from replica (skips Redis)</pre>
         </div>
       </section>
     </main>

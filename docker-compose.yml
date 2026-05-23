@@ -104,6 +104,17 @@ services:
             timeout: 5s
             retries: 5
 
+    redis:
+        image: redis:7-alpine
+        container_name: redis
+        ports:
+            - "6379:6379"
+        healthcheck:
+            test: ["CMD", "redis-cli", "ping"]
+            interval: 5s
+            timeout: 5s
+            retries: 5
+
     api:
         build: .
         container_name: pg-scaling-api
@@ -116,12 +127,17 @@ services:
             WRITE_DB_PORT: 5432
             READ_DB_HOST: pgbouncer-read
             READ_DB_PORT: 5432
+            REDIS_HOST: redis
+            REDIS_PORT: 6379
+            CACHE_TTL_SECONDS: 30
         ports:
             - "3000:3000"
         depends_on:
             pgbouncer:
                 condition: service_healthy
             pgbouncer-read:
+                condition: service_healthy
+            redis:
                 condition: service_healthy
 volumes:
     pg_primary_data:
