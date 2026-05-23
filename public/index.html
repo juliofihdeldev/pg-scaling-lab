@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/css/style.css" />
 </head>
 <body>
   <div class="crt-overlay"></div>
@@ -311,6 +311,13 @@ Why? Reads hit memory instead of Postgres. Writes bust the cache so stale data e
     <div class="console-log" id="console-log"></div>
   </div>
 
-  <script src="/app.js"></script>
+  <script src="/js/utils.js"></script>
+  <script src="/js/db-panel.js"></script>
+  <script src="/js/employees-panel.js"></script>
+  <script src="/js/cache-panel.js"></script>
+  <script src="/js/partitions-panel.js"></script>
+  <script src="/js/replication-panel.js"></script>
+  <script src="/js/boot.js"></script>
+  <script src="/js/main.js"></script>
 </body>
 </html>

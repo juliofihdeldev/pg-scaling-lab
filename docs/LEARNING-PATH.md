@@ -33,7 +33,7 @@ A practical roadmap for scaling backend systems — built around what you've alr
 - [x] Build Express API + console dashboard to exercise the stack
 - [x] Document accomplishments ([ACCOMPLISHMENTS.md](./ACCOMPLISHMENTS.md))
 
-**Key repo files:** `init-primary.sh`, `init-replica.sh`, `pgbouncer-read.ini`, `partitions.js`
+**Key repo files:** `docker/postgres/init-primary.sh`, `docker/postgres/init-replica.sh`, `docker/pgbouncer/pgbouncer-read.ini`, `src/services/partitions.js`
 
 ---
 

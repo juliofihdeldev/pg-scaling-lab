@@ -1,7 +1,7 @@
 const { createClient } = require("redis");
+const config = require("../config");
 
-const TTL = Number(process.env.CACHE_TTL_SECONDS || 30);
-
+const TTL = config.redis.ttlSeconds;
 const stats = { hits: 0, misses: 0, invalidations: 0 };
 
 let client = null;
@@ -12,16 +12,12 @@ const KEYS = {
 };
 
 async function connectRedis() {
-  const url =
-    process.env.REDIS_URL ||
-    `redis://${process.env.REDIS_HOST || "localhost"}:${process.env.REDIS_PORT || 6379}`;
-
-  client = createClient({ url });
+  client = createClient({ url: config.redis.url });
   client.on("error", (err) => console.error("Redis error:", err.message));
 
   await client.connect();
   ready = true;
-  console.log(`Redis connected → ${url}`);
+  console.log(`Redis connected → ${config.redis.url}`);
 }
 
 function isEnabled() {
@@ -118,5 +114,4 @@ module.exports = {
   delKeys,
   flushAll,
   getStats,
-  TTL,
 };

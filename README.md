@@ -95,7 +95,7 @@ PGPASSWORD=postgres psql -h localhost -p 5434 -U postgres -d scalinglab \
 
 ## Console dashboard
 
-The dashboard at **http://localhost:3000** is a terminal-style UI with four panels:
+The dashboard at **http://localhost:3000** is a terminal-style UI with five panels:
 
 | Panel          | What it does                                              |
 | -------------- | --------------------------------------------------------- |
@@ -103,6 +103,7 @@ The dashboard at **http://localhost:3000** is a terminal-style UI with four pane
 | **Employees**  | Insert rows, bulk generate (10K / 100K / 1M), view table  |
 | **Partitions** | 4-step partition lab — setup, seed, detach, query         |
 | **Replication**| Write-then-read test to verify WAL streaming              |
+| **Cache**      | Hit/miss test, flush, bypass — Redis cache-aside demo    |
 
 Run the API locally (with Docker DB stack running):
 
@@ -138,7 +139,7 @@ Bulk amount values: `10k`, `100k`, `1m` (employees) · `10k`, `100k` (orders).
 
 ---
 
-## Redis caching (branch: `caching-with-redis`)
+## Redis caching
 
 **Cache-aside** on `GET /employees`:
 
@@ -177,18 +178,24 @@ After detach, data stays in the standalone table but disappears from parent quer
 
 ```
 pg-scaling-lab/
-├── docker-compose.yml    # Full stack definition
-├── init-primary.sh       # WAL replication + replicator user
-├── init-replica.sh       # pg_basebackup + standby startup
-├── pgbouncer-read.ini    # Read pooler round-robin config
-├── index.js              # Express API
-├── db.js                 # Read/write connection pools
-├── cache.js              # Redis cache-aside layer
-├── partitions.js         # Partition setup, seed, detach, query
-├── public/               # Console dashboard (HTML/CSS/JS)
-├── sql.sql               # Manual SQL exercises
-├── REVIEW.md             # Post-lesson reference guide
-└── ACCOMPLISHMENTS.md    # Summary of what you built
+├── docker-compose.yml
+├── docker/
+│   ├── postgres/          # init-primary.sh, init-replica.sh
+│   └── pgbouncer/         # pgbouncer-read.ini
+├── src/
+│   ├── server.js          # Bootstrap (schema, Redis, listen)
+│   ├── app.js             # Express + static files
+│   ├── config.js
+│   ├── db/                # pools.js, schema.js
+│   ├── cache/             # redis.js (cache-aside)
+│   ├── services/          # employees, partitions, tests
+│   ├── routes/            # API route modules
+│   └── middleware/
+├── public/                # Console dashboard
+│   ├── css/style.css
+│   └── js/                # Panel scripts
+├── sql/seed.sql           # Manual SQL exercises
+└── docs/                  # REVIEW, ACCOMPLISHMENTS, LEARNING-PATH, SECURITY
 ```
 
 ---
@@ -232,9 +239,9 @@ This removes all containers, volumes, and frees ports 5432–5436 and 3000.
 
 ## Further reading
 
-- [REVIEW.md](./REVIEW.md) — commands, troubleshooting, self-test quiz
-- [ACCOMPLISHMENTS.md](./ACCOMPLISHMENTS.md) — lesson-by-lesson summary
-- [LEARNING-PATH.md](./LEARNING-PATH.md) — suggested roadmap with checklist
+- [docs/REVIEW.md](./docs/REVIEW.md) — commands, troubleshooting, self-test quiz
+- [docs/ACCOMPLISHMENTS.md](./docs/ACCOMPLISHMENTS.md) — lesson-by-lesson summary
+- [docs/LEARNING-PATH.md](./docs/LEARNING-PATH.md) — suggested roadmap with checklist
 - [NextWork lesson](https://learn.nextwork.org/projects/2f1f31d3-2209-4f90-9aa1-c7ae1c2261b1)
 
 ---
@@ -245,4 +252,4 @@ ISC — see [LICENSE](./LICENSE).
 
 ## Security
 
-This is a **local lab** with intentional default passwords. Do not expose to the internet or use in production. See [SECURITY.md](./SECURITY.md).
+This is a **local lab** with intentional default passwords. Do not expose to the internet or use in production. See [docs/SECURITY.md](./docs/SECURITY.md).
