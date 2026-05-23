@@ -2,7 +2,7 @@
 
 -- -- Insert sample employees
 -- INSERT INTO employees (name, department, salary) VALUES
---     ('Julio JEAN FILS', 'Engineering', 95000.00),
+--     ('Alice Chen', 'Engineering', 95000.00),
 --     ('Bob Smith', 'Marketing', 72000.00),
 --     ('Carol Davis', 'Engineering', 98000.00);
 

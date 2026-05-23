@@ -285,44 +285,20 @@ Answer these without looking at the docs:
 
 _Lab repo: `pg-scaling-lab` — Docker Compose, Postgres 17, PgBouncer._
 
-# Start everything
+---
 
-docker compose up -d
+## Secret mission — read/write split
 
-# Write on the primary (port 5432)
+Production apps often route writes and reads using **different connection strings**:
 
-PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d scalinglab -f sql.sql
+- Write pooler (`pgbouncer` :5433) → primary
+- Read pooler (`pgbouncer-read` :5436) → replicas (round-robin)
 
-# Read from a replica (port 5434 or 5435)
+This lab implements that pattern in `docker-compose.yml` and `pgbouncer-read.ini`. The console dashboard and Express API use separate read/write pools in `db.js`.
 
-PGPASSWORD=postgres psql -h localhost -p 5434 -U postgres -d scalinglab -c "SELECT \* FROM employees;"
+**You completed:**
 
-# Connect through the pooler (port 5433)
-
-PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -d scalinglab
-
-Connection pooling is now verified and working. Next up, you will implement table partitioning to handle large tables that grow over time.
-
-## SECRET MISSIONS
-
-What if your application could automatically send reads to replicas and writes to the primary, using nothing but different connection strings?
-
-That is exactly how production PostgreSQL deployments handle read/write splitting. One pooler sits in front of the primary for writes. A separate pooler sits in front of the replicas for reads. Your application connects to whichever endpoint matches the operation it needs to perform.
-
-In this secret mission, get ready to:
-
-Create a custom PgBouncer configuration that targets both replicas with round-robin distribution.
-Add a read pooler service to Docker Compose and bring up the updated stack.
-Verify writes through the write pooler and reads through the read pooler work together end-to-end.
-
-You've just built a production-grade PostgreSQL scaling lab from scratch. This is the same architecture pattern used by teams running PostgreSQL for hundreds of millions of users.
-
-You've learned how to:
-
-Set up streaming replication with a primary and 2 read replicas, verifying real-time WAL streaming and monitoring replication lag.
-
-Configure PgBouncer connection pooling in transaction mode and observe how connection multiplexing reduces backend connections under load.
-
-Implement declarative table partitioning with monthly ranges, verify partition pruning with EXPLAIN ANALYZE, and manage partition lifecycle operations.
-
-Secret Mission: Implement read/write splitting with separate PgBouncer instances routing writes to the primary and reads to replicas in round-robin.
+- Streaming replication (primary + 2 replicas)
+- PgBouncer transaction pooling
+- Declarative range partitioning
+- Read/write splitting via dual poolers

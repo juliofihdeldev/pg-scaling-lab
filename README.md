@@ -213,4 +213,8 @@ This removes all containers, volumes, and frees ports 5432–5436 and 3000.
 
 ## License
 
-ISC
+ISC — see [LICENSE](./LICENSE).
+
+## Security
+
+This is a **local lab** with intentional default passwords. Do not expose to the internet or use in production. See [SECURITY.md](./SECURITY.md).
